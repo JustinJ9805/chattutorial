@@ -37,10 +37,29 @@ import androidx.compose.ui.text.font.FontWeight
 
 import androidx.lifecycle.ViewModel
 import androidx.compose.runtime.remember
+import java.util.UUID
 
 class ChatViewModel : ViewModel() {
     var selectedChannel: ChatChannel? by mutableStateOf(null)
+    var messages: List<ChatMessage> by mutableStateOf(emptyList())
+    var chatChannels by mutableStateOf(emptyList<ChatChannel>()) // Define chatChannels here
+    fun sendMessage(messageText: String) {
+        val channel = selectedChannel ?: return
+        val newMessage = ChatMessage(UUID.randomUUID().toString(), messageText, isSender = true)
+        messages = messages + newMessage
+    }
 }
+
+class ChatChannelRepository {
+    fun getChatChannels(): List<ChatChannel> {
+        // Replace this with your logic to fetch chat channels from a data source
+        return listOf(
+            ChatChannel("1", "Patient 1", "Hello!", android.R.drawable.ic_menu_report_image),
+            ChatChannel("2", "Patient 2", "Hello!", android.R.drawable.ic_menu_camera)
+        )
+    }
+}
+
 
 data class ChatMessage(val id: String, val text: String, val isSender: Boolean)
 data class ChatChannel(val id: String, val name: String, val lastMessage: String, val imageUrl: Int)
@@ -66,12 +85,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val navController = rememberNavController()
+                chatViewModel.chatChannels = ChatChannelRepository().getChatChannels()
+
                 NavHost(navController, startDestination = "allMessages") {
                     composable("allMessages") {
-                        val channels = listOf(
-                            ChatChannel("1", "Patient 1", "Hello!", android.R.drawable.ic_menu_report_image),
-                            ChatChannel("2", "Patient 2", "Hello!", android.R.drawable.ic_menu_camera)
-                        )
+                        val channels = chatViewModel.chatChannels
                         AllMessagesScreen(channels) { channel ->
                             chatViewModel.selectedChannel = channel
                             navController.navigate("chat/${channel.id}")
@@ -80,16 +98,13 @@ class MainActivity : ComponentActivity() {
                     composable("chat/{channelId}") { backStackEntry ->
                         val channelId = backStackEntry.arguments?.getString("channelId")
                         val selectedChannel = chatViewModel.selectedChannel
-                        val sampleMessages = listOf(
-                            ChatMessage("1", "Hello!", false),
-                            ChatMessage("2", "Hi!", true)
-                        )
                         selectedChannel?.let {
-                            ChatScreen(it, sampleMessages) { messageText ->
+                            ChatScreen(it, chatViewModel) { messageText ->
                                 // Handle sending the message.
                             }
                         }
                     }
+
                 }
             }
         }
@@ -159,7 +174,9 @@ fun ChatDetails(channel: ChatChannel) {
 }
 
 @Composable
-fun ChatScreen(channel: ChatChannel, messages: List<ChatMessage>, onSendClicked: (String) -> Unit) {
+fun ChatScreen(channel: ChatChannel, chatViewModel: ChatViewModel, onSendClicked: (String) -> Unit) {
+
+    val messages = chatViewModel.messages
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -178,7 +195,9 @@ fun ChatScreen(channel: ChatChannel, messages: List<ChatMessage>, onSendClicked:
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        MessageInput(onSendClicked)
+        MessageInput { messageText ->
+            chatViewModel.sendMessage(messageText) // Call sendMessage to add a new message
+        }
     }
 }
 
@@ -234,8 +253,10 @@ fun MessageInput(onSendClicked: (String) -> Unit) {
         Spacer(modifier = Modifier.width(8.dp))
 
         Button(onClick = {
-            onSendClicked(messageText)
-            messageText = ""
+            if (messageText.isNotBlank()) {
+                onSendClicked(messageText)
+                messageText = ""
+            }
         }) {
             Text("Send")
         }
